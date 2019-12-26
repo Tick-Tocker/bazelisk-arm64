@@ -19,6 +19,21 @@ set -euxo pipefail
 ### Build release artifacts using Bazel.
 rm -rf bazelisk bin
 mkdir bin
+ARCH=$(uname -m)
+
+case ${ARCH:-} in
+'aarch64')
+    binary_arch='arm64'
+    ;;
+'x86_64')
+    binary_arch='amd64'
+    ;;
+*)
+    echo 'Cpu architecture is not supportted!'
+    exit 1
+    ;;
+esac
+
 
 go build
 for platform in darwin linux windows; do
@@ -26,12 +41,12 @@ for platform in darwin linux windows; do
         -c opt \
         --stamp \
         --workspace_status_command="$PWD/stamp.sh" \
-        --platforms=@io_bazel_rules_go//go/toolchain:${platform}_amd64 \
+        --platforms=@io_bazel_rules_go//go/toolchain:${platform}_${binary_arch} \
         //:bazelisk
     if [[ $platform == windows ]]; then
-        cp bazel-bin/${platform}_*/bazelisk.exe bin/bazelisk-${platform}-amd64.exe
+        cp bazel-bin/${platform}_*/bazelisk.exe bin/bazelisk-${platform}-${binary_arch}.exe
     else
-        cp bazel-bin/${platform}_*/bazelisk bin/bazelisk-${platform}-amd64
+        cp bazel-bin/${platform}_*/bazelisk bin/bazelisk-${platform}-${binary_arch}
     fi
 done
 rm -f bazelisk

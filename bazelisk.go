@@ -49,6 +49,11 @@ var (
 	BazeliskVersion = "development"
 )
 
+var (
+	PersonalRepo = "bazel-arm64"
+	PersonalAccount = "Tick-Tocker"
+)
+
 func findWorkspaceRoot(root string) string {
 	if _, err := os.Stat(filepath.Join(root, "WORKSPACE")); err == nil {
 		return root
@@ -119,7 +124,14 @@ func parseBazelForkAndVersion(bazelForkAndVersion string) (string, string, error
 	versionInfo := strings.Split(bazelForkAndVersion, "/")
 
 	if len(versionInfo) == 1 {
-		bazelFork, bazelVersion = bazelUpstream, versionInfo[0]
+
+		if runtime.GOARCH == "arm64" {
+			bazelFork, bazelVersion = PersonalAccount, versionInfo[0]
+		}else{
+			bazelFork, bazelVersion = bazelUpstream, versionInfo[0]
+			PersonalRepo = "bazel"
+		}
+
 	} else if len(versionInfo) == 2 {
 		bazelFork, bazelVersion = versionInfo[0], versionInfo[1]
 	} else {
@@ -193,7 +205,8 @@ func maybeDownload(bazeliskHome, url, filename, description string) ([]byte, err
 }
 
 func resolveLatestVersion(bazeliskHome, bazelFork string, offset int) (string, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/bazel/releases", bazelFork)
+
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", bazelFork,PersonalRepo)
 	releasesJSON, err := maybeDownload(bazeliskHome, url, bazelFork+"-releases.json", "list of Bazel releases from github.com/"+bazelFork)
 	if err != nil {
 		return "", fmt.Errorf("could not get releases from github.com/%s/bazel: %v", bazelFork, err)
@@ -357,9 +370,12 @@ func getLastGreenCommit(pathSuffix string) (string, error) {
 
 func determineBazelFilename(version string) (string, error) {
 	var machineName string
+
 	switch runtime.GOARCH {
 	case "amd64":
 		machineName = "x86_64"
+	case "arm64":
+		machineName = "aarch64"
 	default:
 		return "", fmt.Errorf("unsupported machine architecture \"%s\", must be x86_64", runtime.GOARCH)
 	}
@@ -396,11 +412,19 @@ func determineURL(fork string, version string, isCommit bool, filename string) s
 		kind = "rc" + versionComponents[1]
 	}
 
-	if fork == bazelUpstream {
-		return fmt.Sprintf("https://releases.bazel.build/%s/%s/%s", version, kind, filename)
+	switch runtime.GOARCH {
+	case "amd64":
+		if fork == bazelUpstream {
+			return fmt.Sprintf("https://releases.bazel.build/%s/%s/%s", version, kind, filename)
+		}
+		return fmt.Sprintf("https://github.com/%s/bazel/releases/download/%s/%s", fork, version, filename)		
+	case "arm64":
+		// Personal packages
+		return fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", fork,PersonalRepo, version, filename)
+	default:
+		// Default value
+		return fmt.Sprintf("https://github.com/%s/bazel/releases/download/%s/%s", fork, version, filename)
 	}
-
-	return fmt.Sprintf("https://github.com/%s/bazel/releases/download/%s/%s", fork, version, filename)
 }
 
 func downloadBazel(fork string, version string, isCommit bool, directory string) (string, error) {
@@ -417,6 +441,7 @@ func downloadBazel(fork string, version string, isCommit bool, directory string)
 		if err != nil {
 			return "", fmt.Errorf("could not create temporary file: %v", err)
 		}
+
 		defer func() {
 			err := tmpfile.Close()
 			if err == nil {
